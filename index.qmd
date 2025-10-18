@@ -1,0 +1,14 @@
+---
+title: 'Mi primer reporte en Quarto'
+author: 'Cristina Chavez'
+date: '25-09-2025'
+format:
+    html:
+        embed-resources: true
+
+---
+# Grettings
+
+## I'm here
+
+### Alo

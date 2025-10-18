@@ -1,0 +1,20 @@
+project:
+  type: website
+  output-dir: docs
+  preview:
+    watch-inputs: true   # <- recarga al guardar
+website:
+  title: "Machine Learning"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - href: PF.qmd
+        text: PROYECTO FINAL
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: true
+    fig-align: center
+    df-print: paged

@@ -1,0 +1,702 @@
+---
+title: 'PROYECTO FINAL'
+author: 'Cristina Chavez'
+date: '18-10-2025'
+format:
+    html:
+        embed-resources: true
+
+---
+
+## Introducción
+
+Este proyecto final tiene como objetivo aplicar todos los conocimientos adquiridos a lo largo de la material de Aprendizaje de Máquina. 
+
+El Dataset corresponde a una base de datos de twitter Ecuador en realación a las elecciones presidenciales, para poder enseñarle a la máquina fue necesario realizar un análisis sentimental con ayuda de una API denominada PRESPECTIVE disponible en google cloud.
+
+- Librerías necesarias
+
+
+```{python}
+import re
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+from collections import Counter
+
+from sklearn.model_selection import train_test_split
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+# Clasificación
+from sklearn.model_selection import train_test_split
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import Pipeline
+from sklearn.svm import LinearSVC
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report, confusion_matrix, ConfusionMatrixDisplay, roc_curve, roc_auc_score
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Regresión
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# Clustering
+from sklearn.decomposition import TruncatedSVD
+from sklearn.cluster import KMeans
+```
+
+
+- Importar los datos
+
+El data set esta disponible en el repositorio del docente, por lo que es necesario importar el dataset desde una url.
+```{python}
+url = "https://raw.githubusercontent.com/erickedu85/dataset/refs/heads/master/tweets/1500_tweets_con_toxicity.csv"
+
+```
+
+Con ayuda de una de las herramientas de pandas se convierte el dataset de formato .csv en un dataframe de pandas.
+```{python}
+
+df = pd.read_csv(url)
+```
+
+
+## EDA
+
+El Análisis Exploratorio de Datos (EDA) es fundalmental porque permite relacionarse con la base de datos para determinar las mejores estrategias aplicables en el contexto del dataframe. 
+
+Lo más improtante de todo es que gracias al EDA podamos tomar decisiones informadas en base al contenido del dataframe. 
+
+### Reconociendo la base de datos 
+Una vez que el dataframe es creado se tiene que analizar la información que nos brinda. 
+
+A continuación, observamos la información del dataframe. Donde podemos destacar la cantidad de datos nulos existentes en las diferentes variables y sobre todo el tipo de datos que contiene cada columna. 
+
+```{python}
+df.info()
+```
+
+Para estar más al tanto de el tipo de datos de las diferentes columnas, se puede utilizar alguna de las herramientas de pandas para observar la forma de los datos del dataframe. 
+
+```{python}
+df.head()
+```
+
+### ACERCA DEL DATAFRAME 
+
+Después de conocer mejor el dataframe debemos tomar decisiones sobre que nos sirve y que no para el análisis que se desea realizar. 
+
+A continuación se explica la razón por la que las variables se consideran útiles para el estudio. 
+
+- tweetID. Cumple la función de identificador de cada uno de los casos.
+- content. Contenido del Tweet
+- isReply. el impacto del Tweet
+- createdAt. Fecha de creación. 
+- time_response. Tiempo Expleado en escribir el tweet
+- content_length. Largo del tweet 
+- toxicity_score. Valor de toxicidad del tweet.
+
+### Base de datos limpia
+
+Como respuesta al análisis anterior se realiza un análisis sobre los valores nulos y los valores *outliners*.
+
+```{python}
+# Valores nulos
+print("Valores nulos por columna:")
+print(df.isnull().sum())
+
+# Duplicados
+duplicados = df.duplicated().sum()
+print(f"\nFilas duplicadas: {duplicados}")
+
+# Atípicos en 'toxicity_score' usando el rango intercuartílico (IQR)
+Q1 = df['toxicity_score'].quantile(0.25)
+Q3 = df['toxicity_score'].quantile(0.75)
+IQR = Q3 - Q1
+limite_inferior = Q1 - 1.5 * IQR
+limite_superior = Q3 + 1.5 * IQR
+
+outliers = df[(df['toxicity_score'] < limite_inferior) | (df['toxicity_score'] > limite_superior)]
+print(f"\nNúmero de posibles atípicos en 'toxicity_score': {outliers.shape[0]}")
+
+sns.boxplot(x=df['toxicity_score'])
+plt.title('Detección de valores atípicos en Toxicity Score')
+plt.show()  
+```
+
+
+Para empezar con la limpieza de la base de datos eliminamos las columnas que no serán utilizadas en nuestro estudio
+
+```{python}
+df = df.drop(df.columns[[1, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 18, 20, 21, 22, 24, 25]], axis=1)
+
+df.info()
+```
+
+Conociendo que la variable principal es la Toxicidad, es importante eliminar los valores nulos para tener una base completa. 
+
+
+```{python}
+df = df.dropna(subset=['toxicity_score','mentions'])
+
+df.info()
+```
+
+```{python}
+df.head(25)
+```
+
+### Estadística Desciptiva 
+ 
+Aquí se presenta un análisis de la estádistica descriptiva las variables, se debe considerar que únicamente analiza datos con valor numérico
+
+ ```{python}
+ print(df.describe())
+ ```
+
+### Distribución de la variable dee Toxicidad
+
+
+En la siguiente grafica de la distribución de la variable toxicidad se observa como de alguna forma los valores desde 0 tienden a decrecer mientras más se acerca a 1, teniendo en cuenta que no tiene valores de 1.
+
+ ```{python}
+ # Distribución de 'toxicity_score'
+sns.histplot(df['toxicity_score'], bins=30, kde=True)
+plt.title('Distribución de Toxicity Score')
+plt.xlabel('Toxicity Score')
+plt.ylabel('Frecuencia')
+plt.show()
+ ```
+
+Busca de comprender la dispersión de la toxicidad del conjunto de tweets, se puede ver como se concentra una gran cantidad de tweets debajo del 0.1 en el Toxicity Score.
+
+```{python}
+sns.scatterplot(data=df, x='tweetId', y='toxicity_score')
+plt.title('Dispersión de Toxicity según ID del Tweet')
+plt.xlabel('ID del Tweet')
+plt.ylabel('Toxicity Score')
+plt.show()
+```
+
+Por cuestión perspectiva se realiza el mismo análisis con un cambio de ejes, y de alguna forma entendemos mejor como mientras crece el toxicity score menora la cantidad de tweets. 
+
+```{python}
+sns.scatterplot(data=df, x='toxicity_score', y='tweetId')
+plt.title('Dispersión de ID del Tweet según Toxicity')
+plt.xlabel('Toxicity Score')
+plt.ylabel('ID del Tweet')
+plt.show()
+```
+
+
+Segun las menciones que tengo puedo analizar cuantas hablan de Daniel Noboa y de Luisa Gonzales.
+
+```{python}
+menciones = df['mentions'].dropna()
+
+df_mentions = pd.DataFrame({
+    'DanielNoboaOk': menciones.str.count('@DanielNoboaOk'),
+    'LuisaGonzalezEc': menciones.str.count('@LuisaGonzalezEc')
+}).sum().reset_index()
+
+df_mentions.columns = ['Usuario', 'Conteo']
+
+sns.barplot(data=df_mentions, x='Usuario', y='Conteo')
+plt.title('Conteo de menciones por usuario')
+plt.xlabel('Usuario mencionado')
+plt.ylabel('Número de menciones')
+plt.show()
+```
+
+Aquí se plasma la relación que existe entre la mención a alguno de los candidatos y el nivel de toxiciidad de sus tweets
+
+```{python}
+df_mencion_toxicidad = pd.DataFrame({
+    'DanielNoboaOk': df['mentions'].str.contains('@DanielNoboaOk', na=False),
+    'LuisaGonzalezEc': df['mentions'].str.contains('@LuisaGonzalezEc', na=False),
+    'toxicity_score': df['toxicity_score']
+})
+
+df_melt = df_mencion_toxicidad.melt(
+    id_vars='toxicity_score',
+    var_name='Usuario',
+    value_name='Mencionado'
+)
+
+sns.boxplot(data=df_melt[df_melt['Mencionado']], x='Usuario', y='toxicity_score')
+plt.title('Relación entre mención y nivel de toxicidad')
+plt.xlabel('Usuario mencionado')
+plt.ylabel('Toxicity Score')
+plt.show()
+
+```
+
+Aquí se puede ver que el tiempo por encima de los 10000 segundos es un outliner
+
+```{python}
+sns.scatterplot(data=df, x='content_length', y='time_response')
+plt.title('Dispersión entre el largo del tweet y el tiempo de respuesta')
+plt.xlabel('Longitud del tweet (número de caracteres)')
+plt.ylabel('Tiempo de respuesta (segundos)')
+plt.show()
+```
+
+
+Si cerramos los primeros outliners la dispersión de los datos se ve así 
+
+```{python}
+df = df[(df['time_response'] <= 10000) & (df['content_length'] <= 360)]
+```
+
+```{python}
+sns.scatterplot(data=df, x='content_length', y='time_response')
+plt.title('Dispersión entre el largo del tweet y el tiempo de respuesta')
+plt.xlabel('Longitud del tweet (número de caracteres)')
+plt.ylabel('Tiempo de respuesta (segundos)')
+plt.show()
+```
+
+Considerando que 140 caractéres es lo que permite twitter se filtran los datos, en relación a tiempo de respuesta de 3000
+
+```{python}
+df = df[(df['time_response'] <= 3000) & (df['content_length'] <= 140)]
+```
+
+```{python}
+sns.scatterplot(data=df, x='content_length', y='time_response')
+plt.title('Dispersión entre el largo del tweet y el tiempo de respuesta')
+plt.xlabel('Longitud del tweet (número de caracteres)')
+plt.ylabel('Tiempo de respuesta (segundos)')
+plt.show()
+```
+
+```{python}
+# Largo del contenido vs Toxicity
+sns.scatterplot(data=df, x='content_length', y='toxicity_score')
+plt.title('Dispersión entre largo del contenido y Toxicity')
+plt.xlabel('Longitud del contenido')
+plt.ylabel('Toxicity Score')
+plt.show()
+
+
+```
+
+```{python}
+# Tiempo de respuesta vs Toxicity
+sns.scatterplot(data=df, x='time_response', y='toxicity_score')
+plt.title('Dispersión entre tiempo de respuesta y Toxicity')
+plt.xlabel('Tiempo de respuesta')
+plt.ylabel('Toxicity Score')
+plt.show()
+```
+
+
+### Hallazgos
+ 
+*Aplicando los nuevos conocimientos*
+
+## CLASIFICACIÓN
+
+### Modelo: K-nn
+
+
+Primero se deben transformar los valores de Toxicity a Categorías. 
+
+```{python}
+
+df = df.dropna(subset=['toxicity_score']).copy()
+
+def binning_toxicidad(x):
+    if x < 0.3: return 'No_toxico'
+    elif x < 0.6: return 'Ambiguo'
+    else: return 'Toxico'
+
+df['nivel_toxicidad'] = df['toxicity_score'].apply(binning_toxicidad)
+
+```
+
+También debemos tratar la variable de mención para la clasificación por candidato.
+
+```{python}
+# Usuario mencionado (solo dos de interés; resto "Otros")
+def usuario_mencion(x):
+    if isinstance(x, str) and '@DanielNoboaOk' in x: return 'DanielNoboaOk'
+    if isinstance(x, str) and '@LuisaGonzalezEc' in x: return 'LuisaGonzalezEc'
+    return 'Otros'
+
+df['usuario_mencionado'] = df['mentions'].apply(usuario_mencion)
+```
+
+Defino conjuntos de datos en base al tipo de dato y creo conjuntos para el modelo
+
+```{python}
+text_col = 'content'
+num_cols  = ['time_response','content_length']
+cat_cols  = ['isReply','usuario_mencionado']
+target    = 'nivel_toxicidad'
+
+from sklearn.model_selection import train_test_split
+X = df[[text_col] + num_cols + cat_cols]
+y = df[target]
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+```
+
+*Es hora de modelar*
+
+```{python}
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import Pipeline
+from sklearn.neighbors import KNeighborsClassifier
+
+prepro = ColumnTransformer(
+    transformers=[
+        ('txt', TfidfVectorizer(ngram_range=(1,2), min_df=5, max_df=0.9), text_col),
+        ('num', StandardScaler(), num_cols),
+        ('cat', OneHotEncoder(handle_unknown='ignore', drop='if_binary'), cat_cols),
+    ],
+    remainder='drop'
+)
+
+knn_pipe = Pipeline([
+    ('prep', prepro),
+    ('clf', KNeighborsClassifier(n_neighbors=5, weights='distance'))
+])
+```
+
+Entrenamiento
+
+```{python}
+knn_pipe.fit(X_train, y_train)
+```
+
+Métricas de evaluación
+
+```{python}
+from sklearn.metrics import (
+    accuracy_score, precision_score, recall_score, f1_score,
+    classification_report, confusion_matrix, ConfusionMatrixDisplay,
+    roc_curve, roc_auc_score
+)
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from sklearn.preprocessing import label_binarize
+
+y_pred = knn_pipe.predict(X_test)
+
+print("Reporte de clasificación:\n")
+print(classification_report(y_test, y_pred))
+
+acc = accuracy_score(y_test, y_pred)
+prec = precision_score(y_test, y_pred, average='weighted', zero_division=0)
+rec = recall_score(y_test, y_pred, average='weighted', zero_division=0)
+f1  = f1_score(y_test, y_pred, average='weighted', zero_division=0)
+
+print(f"Accuracy:  {acc:.3f}")
+print(f"Precision: {prec:.3f}")
+print(f"Recall:    {rec:.3f}")
+print(f"F1-Score:  {f1:.3f}")
+```
+
+Según las métricas de evaluación, nuestro modelo es medianamente coherente en base a la información con la que fue entrenado. 
+
+Matriz de Confusión
+
+```{python}
+labels = knn_pipe.named_steps['clf'].classes_
+cm = confusion_matrix(y_test, y_pred, labels=labels)
+ConfusionMatrixDisplay(cm, display_labels=labels).plot(cmap='Blues')
+plt.title('Matriz de confusión - KNN')
+plt.tight_layout()
+plt.show()
+```
+
+La matriz de confusión, indica que tenemos al menos 73 valores no falsos negativos
+
+Curvas ROC. 
+
+```{python}
+y_test_bin = label_binarize(y_test, classes=labels)
+y_score = knn_pipe.predict_proba(X_test)  # shape: (n_samples, n_classes)
+
+for i, clase in enumerate(labels):
+    fpr, tpr, _ = roc_curve(y_test_bin[:, i], y_score[:, i])
+    auc = roc_auc_score(y_test_bin[:, i], y_score[:, i])
+    plt.plot(fpr, tpr, label=f'{clase} (AUC = {auc:.2f})')
+
+plt.plot([0,1],[0,1],'k--')
+plt.title('Curvas ROC por clase - KNN')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend()
+plt.tight_layout()
+plt.show()
+```
+
+En base a la curv a ROC se puede interpretar, que el modelo tiene una baja capacidad para diferenciar los niveles de toxicidad. 
+
+Es muy probable que entre el texto y las variables numéricas no se establezca una relación clara.
+
+### REGRESION LINEAL
+
+Ahora con ayuda de una regresión lineal se considera predecir un toxicity_score
+
+Se empieza con el tratamiento inicial de los datos.
+
+```{python}
+df = df.dropna(subset=['toxicity_score']).copy()
+
+def usuario_mencion(x):
+    if isinstance(x, str) and '@DanielNoboaOk' in x: return 'DanielNoboaOk'
+    if isinstance(x, str) and '@LuisaGonzalezEc' in x: return 'LuisaGonzalezEc'
+    return 'Otros'
+
+df['usuario_mencionado'] = df['mentions'].apply(usuario_mencion)
+
+text_col = 'content'
+num_cols  = ['time_response','content_length']
+cat_cols  = ['isReply','usuario_mencionado']
+target    = 'toxicity_score'
+
+X = df[[text_col] + num_cols + cat_cols]
+y = df[target]
+```
+
+Antes de empezar con el modelado, es importante realizar la división de los conjuntos de entrenamiento y testeo. 
+
+```{python}
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+```
+
+Modelo
+
+```{python}
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LinearRegression
+
+prepro = ColumnTransformer(
+    transformers=[
+        ('txt', TfidfVectorizer(ngram_range=(1,2), min_df=5, max_df=0.9), text_col),
+        ('num', StandardScaler(), num_cols),
+        ('cat', OneHotEncoder(handle_unknown='ignore', drop='if_binary'), cat_cols),
+    ],
+    remainder='drop'
+)
+
+linreg_pipe = Pipeline([
+    ('prep', prepro),
+    ('reg', LinearRegression())
+])
+
+```
+
+Entrenamiento del modelo
+
+```{python}
+linreg_pipe.fit(X_train, y_train)
+```
+
+A continuación se presenta la predicción y las métricas de evaluación: 
+
+```{python}
+
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+y_pred = linreg_pipe.predict(X_test)
+
+mae  = mean_absolute_error(y_test, y_pred)
+
+r2   = r2_score(y_test, y_pred)
+
+print(f"MAE:  {mae:.4f}")
+
+print(f"R²:   {r2:.4f}")
+```
+
+En base a las métricas de evaluación se puede decir que el modelo se equivoca 0.23, cuando intenta predecir el valor de la toxicidad.
+También se debe considerar que un valor negativo de R^2 representa que no hay una relación lineal significativa entre las variables. 
+
+A continuación, para entender mejor se presenta el ejemplo gráfico. 
+
+```{python}
+import seaborn as sns
+import matplotlib.pyplot as plt
+```
+
+```{python}
+# Real vs Predicho
+sns.scatterplot(x=y_test, y=y_pred)
+plt.title('Toxicity real vs predicha (Regresión lineal)')
+plt.xlabel('Real')
+plt.ylabel('Predicho')
+plt.tight_layout()
+plt.show()
+```
+
+Aquí se puede observar por la dispersión de los datos, como no existe una relación lineal entre los predictores y la toxicidad
+
+```{python}
+# Residuales
+res = y_test - y_pred
+sns.histplot(res, bins=30, kde=True)
+plt.title('Distribución de residuales')
+plt.xlabel('Error')
+plt.ylabel('Frecuencia')
+plt.tight_layout()
+plt.show()
+```
+
+
+Los errores están dispersos por lo que el modelo subestima y sobreestima los diferentes rangos. 
+
+
+```{python}
+sns.scatterplot(x=y_pred, y=res)
+plt.axhline(0, linestyle='--')
+plt.title('Residuales vs Predicho')
+plt.xlabel('Predicho')
+plt.ylabel('Residual')
+plt.tight_layout()
+plt.show()
+```
+
+En la gráfica de Residuales vs Predichos se observa como los puntos tienen una tendencia decendente y cuenta con un límite, lo que nos dice que no tenemos patrones. 
+
+*No olvidar que si el modelo fuera correcto los valores deberían verse distribuidos aleatoriamente.*
+
+
+### CLUSTERING
+
+El clustering es un tipo de herramienta que nos permite agrupar, por lo que es aplicable a los datos disponibles. 
+
+Preparación de los datos. 
+
+```{python}
+df = df.dropna(subset=['toxicity_score']).copy()
+
+def usuario_mencion(x):
+    if isinstance(x, str) and '@DanielNoboaOk' in x: return 'DanielNoboaOk'
+    if isinstance(x, str) and '@LuisaGonzalezEc' in x: return 'LuisaGonzalezEc'
+    return 'Otros'
+
+df['usuario_mencionado'] = df['mentions'].apply(usuario_mencion)
+
+text_col = 'content'
+num_cols  = ['time_response','content_length','toxicity_score']
+cat_cols  = ['isReply','usuario_mencionado']
+
+```
+
+A continuación se empieza con el proceso de preprocesamiento.
+
+```{python}
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.pipeline import Pipeline
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+import seaborn as sns
+import pandas as pd
+
+prepro = ColumnTransformer(
+    transformers=[
+        ('txt', TfidfVectorizer(ngram_range=(1,2), min_df=5, max_df=0.9), text_col),
+        ('num', StandardScaler(), num_cols),
+        ('cat', OneHotEncoder(handle_unknown='ignore', drop='if_binary'), cat_cols)
+    ],
+    remainder='drop'
+)
+```
+
+Pipeline de Kmeans. 
+
+```{python}
+kmeans_pipe = Pipeline([
+    ('prep', prepro),
+    ('cluster', KMeans(n_clusters=3, random_state=42, n_init=10))
+])
+```
+
+Entrenamiento del modelo
+
+```{python}
+kmeans_pipe.fit(df)
+df['cluster'] = kmeans_pipe.named_steps['cluster'].labels_
+```
+
+Para poder interpretar mejor los datos, se procede a graficar los resultados. 
+
+```{python}
+sns.boxplot(data=df, x='cluster', y='toxicity_score')
+plt.title('Distribución de Toxicity Score por Cluster')
+plt.xlabel('Cluster')
+plt.ylabel('Toxicity Score')
+plt.show()
+```
+
+El modelo diseñado logra separar los tweets en tres grupos según su nivel de toxicidad. 
+
+```{python}
+resumen = df.groupby('cluster')[['toxicity_score','time_response','content_length']].mean().round(3)
+print("Promedios por cluster:")
+print(resumen)
+```
+
+Entonces, se puede entender que los clusters se diferencian por nivel de toxicididad, el largo de la escritura y el tiempo que se demora esta. 
+
+Se podría decir que: 
+- Mientras mas corto el mensaje, menos tóxico
+- Los Mensajes más largos y con más demora, pueden considerarse ambiguos. 
+- Los mensajes más tóicos no son necesariamente los más largos, pero si influye mucho la extensión. 
+
+Agrupación: 
+
+```{python}
+resumen = df.groupby('cluster')[['toxicity_score','time_response','content_length']].mean().round(3)
+print("Promedios por cluster:")
+print(resumen)
+
+# === 7) Relación entre usuario mencionado y cluster ===
+tabla = pd.crosstab(df['usuario_mencionado'], df['cluster'], normalize='index') * 100
+sns.heatmap(tabla, annot=True, fmt=".1f", cmap="Blues")
+plt.title("Relación entre usuarios mencionados y clusters (%)")
+plt.xlabel("Cluster")
+plt.ylabel("Usuario mencionado")
+plt.show()
+```
+
+En este modelo se puede evidenciar que:
+
+- Los Mensajes más tóxicos y extensos se concentran en el grupo que menciona a Daniel Noboa
+- Los mensajes más cortos y menos agresviso están asociados a Luisa Gonzales y a otros usuarios. 
+
+## CONCLUSIONES
+
+1. Entre los diferentes métodos utilizados: k-nn, regresión lineal y k-means; se puede indicar que cada uno logra un avance diferente al otro, nos permiten interpretar la información de diferentes formas. Y aunque no alcanzan altos niveles de precisión, permiten caracterizar patrones de comportamiento. 
+2. En cuanto al dataframe, la limpieza del mismo es una herramienta muy robusta para el entrenamiento, es muy importante considerar la eliminación de variables no necesarias y los outliners para obtener mejor métricas de calculo. 
+3. Por último, se ve la necesidad de utilizar modelos más avanzados de procesamiento de lenguaje natural con el objetivo de entender mejor el contexto, la ironía y la carga emocional que define la toxicidad de los mensajes.
